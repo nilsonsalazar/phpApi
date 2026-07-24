@@ -60,35 +60,19 @@ function handleGetRequest() {
     
     if (isset($_GET['search'])) {
         $searchTerm = '%' . $_GET['search'] . '%';
-
-        $stmt = $pdo->prepare("
-            SELECT id, title, artist, key_signature, tempo, time_signature
-            FROM songs
-            WHERE workspace_id = ?
-              AND (title LIKE ? OR artist LIKE ?)
-            ORDER BY
-                CASE
-                    WHEN title LIKE ? THEN 0
-                    ELSE 1
-                END,
-                title ASC
-        ");
-
+        $stmt = $pdo->prepare("SELECT id, title, key_signature, tempo, time_signature FROM songs WHERE workspace_id = ? AND (title LIKE ? OR artist LIKE ?)
+");
         $stmt->execute([
-            $workspaceId,
-            $searchTerm,
-            $searchTerm,
-            $searchTerm
-        ]);
-
+    $workspaceId,
+    $search,
+    $search
+]);
         echo json_encode($stmt->fetchAll());
-
     } elseif (isset($_GET['id'])) {
-
         $stmt = $pdo->prepare("SELECT * FROM songs WHERE workspace_id = ? AND id = ?");
         $stmt->execute([$workspaceId, $_GET['id']]);
         $song = $stmt->fetch();
-
+        
         if ($song) {
             $song['song_data'] = json_decode($song['song_data'], true);
             echo json_encode($song);
@@ -96,16 +80,8 @@ function handleGetRequest() {
             http_response_code(404);
             echo json_encode(['error' => 'Song not found']);
         }
-
     } else {
-
-        $stmt = $pdo->prepare("
-            SELECT id, title, artist, key_signature, tempo, time_signature
-            FROM songs
-            WHERE workspace_id = ?
-            ORDER BY title ASC
-        ");
-
+        $stmt = $pdo->prepare("SELECT id, title, key_signature, tempo, time_signature FROM songs WHERE workspace_id = ?");
         $stmt->execute([$workspaceId]);
         echo json_encode($stmt->fetchAll());
     }
