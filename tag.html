@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Generador de Etiquetas FlashStock</title>
+  <!-- Librería para generación directa de PDF -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <style>
+    * { box-sizing: border-box; font-family: 'Arial Black', 'Impact', sans-serif; }
+    body { margin: 0; background-color: #1e1e1e; color: #fff; display: flex; height: 100vh; font-family: Arial, sans-serif; }
+    
+    /* Panel lateral de edición */
+    .sidebar { width: 380px; background: #252526; padding: 20px; border-right: 1px solid #3c3c3c; display: flex; flex-direction: column; }
+    .sidebar h2 { font-size: 1.1rem; margin-top: 0; color: #f59e0b; text-transform: uppercase; font-family: Arial, sans-serif; }
+    
+    .tabs-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-bottom: 15px; }
+    .tab-btn { 
+      background: #333; color: #ccc; border: 1px solid #444; padding: 8px 4px; 
+      font-size: 0.75rem; cursor: pointer; border-radius: 3px; font-weight: bold; text-align: center;
+    }
+    .tab-btn.active { background: #d90429; color: #fff; border-color: #d90429; }
+    
+    .form-container { flex: 1; overflow-y: auto; padding-right: 5px; }
+    .form-group { margin-bottom: 12px; }
+    .form-group label { display: block; font-size: 0.8rem; margin-bottom: 4px; color: #aaa; }
+    .form-group input, .form-group textarea { 
+      width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #444; 
+      background: #1e1e1e; color: #fff; font-size: 0.85rem; font-family: Arial, sans-serif;
+    }
+    .form-group input:focus, .form-group textarea:focus { border-color: #f59e0b; outline: none; }
+
+    .actions { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+    .btn-secondary { background: #444; color: #fff; border: none; padding: 8px; border-radius: 4px; cursor: pointer; font-size: 0.8rem; font-weight: bold; }
+    .btn-secondary:hover { background: #555; }
+    
+    .btn-pdf { 
+      padding: 12px; background: #d90429; color: #fff; font-weight: bold; 
+      border: none; border-radius: 4px; cursor: pointer; font-size: 0.95rem; text-transform: uppercase;
+    }
+    .btn-pdf:hover { background: #b00320; }
+
+    .btn-print { 
+      padding: 10px; background: #f59e0b; color: #000; font-weight: bold; 
+      border: none; border-radius: 4px; cursor: pointer; font-size: 0.85rem; text-transform: uppercase;
+    }
+    .btn-print:hover { background: #d97706; }
+
+    /* Vista Previa Hoja A4 Maximizada */
+    .preview-area { flex: 1; padding: 10px; overflow: auto; display: flex; justify-content: center; background: #121212; }
+    
+    .sheet { 
+      width: 210mm; 
+      height: 297mm; 
+      background: white; 
+      color: #000; 
+      padding: 3mm; 
+      display: grid; 
+      grid-template-columns: repeat(2, 1fr); 
+      grid-template-rows: repeat(4, 1fr);
+      grid-gap: 3mm; 
+      box-shadow: 0 0 15px rgba(0,0,0,0.6); 
+    }
+
+    /* ETIQUETA - MÁXIMO APROVECHAMIENTO */
+    .tag { 
+      border: 3.5px dashed #d90429; 
+      width: 100%;
+      height: 100%; 
+      position: relative; 
+      display: flex; 
+      flex-direction: column; 
+      background: #fff; 
+      overflow: hidden;
+      border-radius: 10px; 
+      cursor: pointer;
+    }
+    .tag.selected { outline: 4px solid #f59e0b; outline-offset: -2px; }
+
+    /* Cabecera Roja */
+    .tag-header { 
+      background-color: #d90429; color: #ffffff; text-align: center; 
+      padding: 6px 0; font-size: 2.1rem; font-weight: 900; letter-spacing: -0.5px;
+      line-height: 1;
+    }
+
+    /* Centro: Título y Descripción */
+    .tag-body { 
+      flex: 1; display: flex; flex-direction: column; justify-content: center; 
+      align-items: center; text-align: center; padding: 4px 10px; color: #000;
+    }
+    .product-title { 
+      font-size: 1.3rem; font-weight: 900; line-height: 1.1; margin-bottom: 2px; text-transform: lowercase;
+    }
+    .product-specs { 
+      font-size: 1rem; font-weight: 800; line-height: 1.15; color: #000; text-transform: lowercase; white-space: pre-line;
+    }
+
+    /* Pie: Precio Viejo + Nuevo + Melhor Preço */
+    .tag-footer { 
+      height: 28mm; background-color: #d90429; display: flex; 
+      position: relative; border-top: 2px solid #d90429;
+    }
+
+    /* Bloque Amarillo Izquierda */
+    .yellow-block { 
+      background-color: #ffc800; width: 36%; display: flex; flex-direction: column; 
+      justify-content: center; align-items: center; padding: 2px;
+      border-top-right-radius: 10px;
+    }
+    .yellow-block span { 
+      color: #000; font-size: 1.05rem; font-weight: 900; line-height: 0.95; text-align: center; text-transform: uppercase;
+    }
+
+    /* Área Roja Derecha */
+    .price-area { 
+      width: 64%; display: flex; flex-direction: column; 
+      justify-content: space-between; align-items: flex-end; padding: 4px 8px 4px 0;
+    }
+
+    /* Bloque Negro Precio Anterior */
+    .old-price-box { 
+      background-color: #000; color: #fff; padding: 2px 10px; 
+      border-radius: 6px; font-size: 0.95rem; font-weight: 900; 
+      text-decoration: line-through; text-decoration-color: #d90429;
+    }
+
+    /* CONTENEDOR DE PRECIO ADAPTABLE */
+    .price-container {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      container-type: inline-size;
+    }
+
+    /* Precio Nuevo Auto-escalable */
+    .new-price { 
+      color: #ffffff; 
+      font-weight: 900; 
+      line-height: 0.9; 
+      letter-spacing: -1px;
+      white-space: nowrap;
+      text-align: right;
+      font-size: clamp(2rem, 28cqw, 4.5rem);
+    }
+
+    .tag-num { position: absolute; top: 2px; right: 5px; font-size: 0.6rem; color: #fff; opacity: 0.6; font-family: Arial; }
+
+    /* Impresión limpia sin elementos innecesarios */
+    @media print {
+      * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        color-adjust: exact !important;
+      }
+      @page {
+        size: A4 portrait;
+        margin: 0;
+      }
+      body { background: #fff; }
+      .sidebar { display: none !important; }
+      .preview-area { padding: 0; background: #fff; display: block; }
+      .sheet { 
+        box-shadow: none; 
+        width: 210mm; 
+        height: 297mm; 
+        padding: 2mm; 
+        grid-gap: 2mm;
+      }
+      .tag { border: 3px dashed #d90429 !important; }
+      .tag.selected { outline: none !important; }
+      .tag-num { display: none !important; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- PANEL DE CONTROL -->
+  <div class="sidebar">
+    <h2>Editar Etiquetas (1 al 8)</h2>
+    
+    <div class="tabs-grid" id="tabsContainer"></div>
+
+    <div class="form-container">
+      <div class="form-group">
+        <label id="lblTitle">Título del Producto:</label>
+        <input type="text" id="inTitle" oninput="updateCurrentTag()">
+      </div>
+
+      <div class="form-group">
+        <label>Descripción del Producto:</label>
+        <textarea id="inSpecs" rows="3" oninput="updateCurrentTag()"></textarea>
+      </div>
+
+      <div class="form-group">
+        <label>Precio Anterior (Negro):</label>
+        <input type="text" id="inOldPrice" placeholder="ej. 888,99 €" oninput="updateCurrentTag()">
+      </div>
+
+      <div class="form-group">
+        <label>Precio Nuevo (Grande Blanco):</label>
+        <input type="text" id="inPrice" placeholder="ej. 888,99 €" oninput="updateCurrentTag()">
+      </div>
+    </div>
+
+    <div class="actions">
+      <button class="btn-secondary" onclick="copyTag1ToAll()">Copiar Etiq. 1 a todas</button>
+      <button class="btn-secondary" onclick="saveProject()">💾 Guardar Edición (Proyecto)</button>
+      <button class="btn-secondary" onclick="document.getElementById('fileInput').click()">📂 Cargar Proyecto Guardado</button>
+      <input type="file" id="fileInput" style="display:none" accept=".json" onchange="loadProject(event)">
+      
+      <button class="btn-pdf" onclick="downloadPDF()">📄 Descargar PDF de Imprenta</button>
+      <button class="btn-print" onclick="window.print()">🖨️ Imprimir Directo</button>
+    </div>
+  </div>
+
+  <!-- VISTA PREVIA HOJA A4 -->
+  <div class="preview-area">
+    <div class="sheet" id="sheetContainer"></div>
+  </div>
+
+  <script>
+    const tagsData = Array.from({ length: 8 }, (_, i) => ({
+      title: "titulo producto",
+      specs: "descripcion producto",
+      oldPrice: "888,99 €",
+      price: "888,99 €"
+    }));
+
+    let currentIdx = 0;
+
+    function init() {
+      renderTabs();
+      renderSheet();
+      loadFormValues(0);
+    }
+
+    function renderTabs() {
+      const container = document.getElementById('tabsContainer');
+      container.innerHTML = '';
+      for (let i = 0; i < 8; i++) {
+        container.innerHTML += `
+          <button class="tab-btn ${i === currentIdx ? 'active' : ''}" onclick="selectTag(${i})">
+            Etiq. ${i + 1}
+          </button>
+        `;
+      }
+    }
+
+    function renderSheet() {
+      const sheet = document.getElementById('sheetContainer');
+      sheet.innerHTML = '';
+      tagsData.forEach((data, i) => {
+        sheet.innerHTML += `
+          <div class="tag ${i === currentIdx ? 'selected' : ''}" id="tag_${i}" onclick="selectTag(${i})">
+            <span class="tag-num">#${i + 1}</span>
+            <div class="tag-header">FlashStock.pt</div>
+            <div class="tag-body">
+              <div class="product-title" id="outTitle_${i}"></div>
+              <div class="product-specs" id="outSpecs_${i}"></div>
+            </div>
+            <div class="tag-footer">
+              <div class="yellow-block">
+                <span>MELHOR</span>
+                <span>PREÇO</span>
+              </div>
+              <div class="price-area">
+                <div class="old-price-box" id="outOldPrice_${i}"></div>
+                <div class="price-container">
+                  <div class="new-price" id="outPrice_${i}"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+        updateTagDOM(i);
+      });
+    }
+
+    function selectTag(index) {
+      currentIdx = index;
+      renderTabs();
+      
+      document.querySelectorAll('.tag').forEach((el, i) => {
+        el.classList.toggle('selected', i === currentIdx);
+      });
+
+      loadFormValues(currentIdx);
+    }
+
+    function loadFormValues(index) {
+      document.getElementById('lblTitle').innerText = `Título (Etiqueta #${index + 1}):`;
+      document.getElementById('inTitle').value = tagsData[index].title;
+      document.getElementById('inSpecs').value = tagsData[index].specs;
+      document.getElementById('inOldPrice').value = tagsData[index].oldPrice;
+      document.getElementById('inPrice').value = tagsData[index].price;
+    }
+
+    function updateCurrentTag() {
+      tagsData[currentIdx].title = document.getElementById('inTitle').value;
+      tagsData[currentIdx].specs = document.getElementById('inSpecs').value;
+      tagsData[currentIdx].oldPrice = document.getElementById('inOldPrice').value;
+      tagsData[currentIdx].price = document.getElementById('inPrice').value;
+      
+      updateTagDOM(currentIdx);
+    }
+
+    function updateTagDOM(i) {
+      document.getElementById(`outTitle_${i}`).innerText = tagsData[i].title || '';
+      document.getElementById(`outSpecs_${i}`).innerText = tagsData[i].specs || '';
+      
+      const oldP = document.getElementById(`outOldPrice_${i}`);
+      if (tagsData[i].oldPrice) {
+        oldP.innerText = tagsData[i].oldPrice;
+        oldP.style.display = 'block';
+      } else {
+        oldP.style.display = 'none';
+      }
+
+      const priceElem = document.getElementById(`outPrice_${i}`);
+      const textVal = tagsData[i].price || '';
+      priceElem.innerText = textVal;
+
+      const len = textVal.length;
+      if (len <= 4) {
+        priceElem.style.fontSize = 'clamp(2.8rem, 36cqw, 4.8rem)';
+      } else if (len <= 7) {
+        priceElem.style.fontSize = 'clamp(2.2rem, 28cqw, 3.8rem)';
+      } else if (len <= 9) {
+        priceElem.style.fontSize = 'clamp(1.8rem, 23cqw, 3.1rem)';
+      } else {
+        priceElem.style.fontSize = 'clamp(1.3rem, 18cqw, 2.4rem)';
+      }
+    }
+
+    function copyTag1ToAll() {
+      const firstTag = { ...tagsData[0] };
+      for (let i = 1; i < 8; i++) {
+        tagsData[i] = { ...firstTag };
+        updateTagDOM(i);
+      }
+    }
+
+    /* GENERACIÓN DE PDF NOMBRADO AUTOMÁTICAMENTE */
+    function downloadPDF() {
+      const element = document.getElementById('sheetContainer');
+      
+      // Quitar selección visual temporalmente
+      document.querySelectorAll('.tag').forEach(el => el.classList.remove('selected'));
+
+      // Formatear nombre: Etiquetas_AAAA-MM-DD_NombreProducto.pdf
+      const today = new Date().toISOString().split('T')[0];
+      const rawTitle = tagsData[0].title || 'Producto';
+      const cleanTitle = rawTitle.replace(/[^a-zA-Z0-9_\-]/g, '_').substring(0, 25);
+      const filename = `Etiquetas_${today}_${cleanTitle}.pdf`;
+
+      const opt = {
+        margin: 0,
+        filename: filename,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      };
+
+      html2pdf().set(opt).from(element).save().then(() => {
+        selectTag(currentIdx); // Restaurar selección
+      });
+    }
+
+    /* GUARDAR PROYECTO JSON PARA EDITAR LUEGO */
+    function saveProject() {
+      const today = new Date().toISOString().split('T')[0];
+      const rawTitle = tagsData[0].title || 'Producto';
+      const cleanTitle = rawTitle.replace(/[^a-zA-Z0-9_\-]/g, '_').substring(0, 25);
+      const filename = `Proyecto_Etiquetas_${today}_${cleanTitle}.json`;
+
+      const blob = new Blob([JSON.stringify(tagsData, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      a.click();
+    }
+
+    /* CARGAR PROYECTO JSON GUARDADO */
+    function loadProject(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          const loadedData = JSON.parse(e.target.result);
+          if (Array.isArray(loadedData) && loadedData.length === 8) {
+            loadedData.forEach((item, i) => {
+              tagsData[i] = item;
+            });
+            selectTag(0);
+            renderSheet();
+            alert('¡Proyecto cargado con éxito! Ya puedes corregir las etiquetas.');
+          } else {
+            alert('El archivo no tiene el formato correcto.');
+          }
+        } catch (err) {
+          alert('Error al leer el archivo de proyecto.');
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    init();
+  </script>
+</body>
+</html>
