@@ -60,8 +60,8 @@ function handleGetRequest() {
     
     if (isset($_GET['search'])) {
         $searchTerm = '%' . $_GET['search'] . '%';
-        $stmt = $pdo->prepare("SELECT id, title, key_signature, tempo, time_signature, artist FROM songs WHERE workspace_id = ? AND (title LIKE ? OR song_data LIKE ? OR artist LIKE ?)");
-        $stmt->execute([$workspaceId, $searchTerm, $searchTerm, $searchTerm]);
+        $stmt = $pdo->prepare("SELECT id, title, key_signature, tempo, time_signature, artist FROM songs WHERE workspace_id = ? AND (title LIKE ? OR artist LIKE ?)");
+        $stmt->execute([$workspaceId, $searchTerm, $searchTerm]);
         echo json_encode($stmt->fetchAll());
     } elseif (isset($_GET['id'])) {
         $stmt = $pdo->prepare("SELECT * FROM songs WHERE workspace_id = ? AND id = ?");
