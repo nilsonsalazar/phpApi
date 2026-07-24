@@ -60,9 +60,8 @@ function handleGetRequest() {
     
     if (isset($_GET['search'])) {
         $searchTerm = '%' . $_GET['search'] . '%';
-        $stmt = $pdo->prepare("SELECT id, title, key_signature, tempo, time_signature FROM songs WHERE workspace_id = ? AND (title LIKE ? OR song_data LIKE ?)
-");
-        $stmt->execute([$workspaceId, $searchTerm, $searchTerm]);
+        $stmt = $pdo->prepare("SELECT id, title, key_signature, tempo, time_signature, artist FROM songs WHERE workspace_id = ? AND (title LIKE ? OR song_data LIKE ? OR artist LIKE ?)");
+        $stmt->execute([$workspaceId, $searchTerm, $searchTerm, $searchTerm]);
         echo json_encode($stmt->fetchAll());
     } elseif (isset($_GET['id'])) {
         $stmt = $pdo->prepare("SELECT * FROM songs WHERE workspace_id = ? AND id = ?");
@@ -77,7 +76,7 @@ function handleGetRequest() {
             echo json_encode(['error' => 'Song not found']);
         }
     } else {
-        $stmt = $pdo->prepare("SELECT id, title, key_signature, tempo, time_signature FROM songs WHERE workspace_id = ?");
+        $stmt = $pdo->prepare("SELECT id, title, key_signature, tempo, time_signature,artist FROM songs WHERE workspace_id = ?");
         $stmt->execute([$workspaceId]);
         echo json_encode($stmt->fetchAll());
     }
@@ -88,7 +87,7 @@ function handlePostRequest() {
     
     $data = json_decode(file_get_contents('php://input'), true);
     
-    $requiredFields = ['title', 'key_signature', 'tempo', 'time_signature', 'song_data'];
+    $requiredFields = ['title', 'key_signature', 'tempo', 'time_signature', 'song_data', 'artist'];
     foreach ($requiredFields as $field) {
         if (!isset($data[$field])) {
             http_response_code(400);
@@ -98,14 +97,15 @@ function handlePostRequest() {
     }
     
     try {
-        $stmt = $pdo->prepare("INSERT INTO songs (workspace_id, title, key_signature, tempo, time_signature, song_data) VALUES (?, ?, ?, ?, ?, ?)");
+        $stmt = $pdo->prepare("INSERT INTO songs (workspace_id, title, key_signature, tempo, time_signature, song_data, artist) VALUES (?, ?, ?, ?, ?, ?, ?)");
         $stmt->execute([
             $workspaceId,
             $data['title'],
             $data['key_signature'],
             $data['tempo'],
             $data['time_signature'],
-            json_encode($data['song_data'])
+            json_encode($data['song_data']),
+            $data['artist']
         ]);
         
         $songId = $pdo->lastInsertId();
@@ -125,7 +125,7 @@ function handlePutRequest() {
     
     $data = json_decode(file_get_contents('php://input'), true);
     
-    $requiredFields = ['id', 'title', 'key_signature', 'tempo', 'time_signature', 'song_data'];
+    $requiredFields = ['id', 'title', 'key_signature', 'tempo', 'time_signature', 'song_data', 'artist'];
     foreach ($requiredFields as $field) {
         if (!isset($data[$field])) {
             http_response_code(400);
@@ -135,13 +135,14 @@ function handlePutRequest() {
     }
     
     try {
-        $stmt = $pdo->prepare("UPDATE songs SET title = ?, key_signature = ?, tempo = ?, time_signature = ?, song_data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND workspace_id = ?");
+        $stmt = $pdo->prepare("UPDATE songs SET title = ?, key_signature = ?, tempo = ?, time_signature = ?, song_data = ?, artist = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND workspace_id = ?");
         $stmt->execute([
             $data['title'],
             $data['key_signature'],
             $data['tempo'],
             $data['time_signature'],
             json_encode($data['song_data']),
+            $data['artist'],
             $data['id'],
             $workspaceId
         ]);
