@@ -100,3 +100,25 @@ function updateLastLogin(PDO $pdo, int $userId): void
 
     $stmt->execute([$userId]);
 }
+/**
+ * Valida si el usuario actual tiene uno de los roles permitidos.
+ * Detiene la ejecución con un código 403 si no tiene permisos.
+ */
+function requireRole(PDO $pdo, array $allowedRoles): void
+{
+    $currentUser = getCurrentUser($pdo);
+
+    if (!$currentUser) {
+        http_response_code(401);
+        echo json_encode(['error' => 'No autorizado']);
+        exit();
+    }
+
+    $role = $currentUser['role'] ?? 'reader';
+
+    if (!in_array($role, $allowedRoles, true)) {
+        http_response_code(403);
+        echo json_encode(['error' => 'Acceso denegado: permisos insuficientes']);
+        exit();
+    }
+}

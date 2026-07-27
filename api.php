@@ -36,13 +36,16 @@ switch ($requestMethod) {
     case 'GET':
         handleGetRequest();
         break;
-    case 'POST':
+ case 'POST':
+        requireRole($pdo, ['admin', 'editor']);
         handlePostRequest();
         break;
     case 'PUT':
+        requireRole($pdo, ['admin', 'editor']);
         handlePutRequest();
         break;
     case 'DELETE':
+        requireRole($pdo, ['admin']);
         handleDeleteRequest();
         break;
     default:

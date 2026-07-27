@@ -1,0 +1,1414 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+song/
+  song.php
+api.php
+auth_service.php
+auth.php
+bootstrap.php
+config.php
+deploy.php
+info.php
+login.php
+me.php
+README.md
+response.php
+session.php
+tagger.html
+test.php
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="auth_service.php">
+<?php
+
+declare(strict_types=1);
+
+/**
+ * Usuario temporal mientras implementamos el login.
+ *
+ * Más adelante este método leerá el token de la tabla
+ * user_sessions y devolverá el usuario autenticado.
+ */
+/**
+ * Devuelve el usuario autenticado mediante el token Bearer.
+ */
+function getCurrentUser(PDO $pdo): ?array
+{
+    $token = getBearerToken();
+
+    if (!$token) {
+        return null;
+    }
+
+    return getSessionByToken($pdo, $token);
+}
+
+/**
+ * Devuelve true si el usuario es administrador.
+ */
+function isAdmin(): bool
+{
+    return getCurrentUser()['role'] === 'admin';
+}
+
+/**
+ * Devuelve el Workspace actual.
+ */
+function getWorkspaceId(): int
+{
+    return (int)getCurrentUser()['workspace_id'];
+}
+
+/**
+ * Busca un usuario por teléfono.
+ */
+function getUserByPhone(PDO $pdo, string $phone): ?array
+{
+    $sql = "
+        SELECT *
+        FROM users
+        WHERE phone = ?
+          AND active = 1
+        LIMIT 1
+    ";
+
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute([$phone]);
+
+    $user = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    return $user ?: null;
+}
+
+/**
+ * Intenta autenticar un usuario mediante teléfono y contraseña.
+ *
+ * Devuelve el usuario si las credenciales son correctas.
+ * Devuelve null si son incorrectas.
+ */
+function login(PDO $pdo, string $phone, string $password): ?array
+{
+    $user = getUserByPhone($pdo, $phone);
+
+    if (!$user) {
+        return null;
+    }
+
+    if (!$user['active']) {
+        return null;
+    }
+
+    if (!password_verify($password, $user['password_hash'])) {
+        return null;
+    }
+    
+    updateLastLogin($pdo, (int)$user['id']);
+
+    $user['token'] = createSession($pdo, $user);
+    // Nunca devolver información sensible
+unset($user['password_hash']);
+
+    return $user;
+}
+
+function updateLastLogin(PDO $pdo, int $userId): void
+{
+    $stmt = $pdo->prepare("
+        UPDATE users
+        SET last_login = NOW()
+        WHERE id = ?
+    ");
+
+    $stmt->execute([$userId]);
+}
+</file>
+
+<file path="auth.php">
+<?php
+
+declare(strict_types=1);
+
+header("Access-Control-Allow-Origin: *");
+header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
+header("Access-Control-Allow-Headers: Content-Type, Authorization");
+
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(200);
+    exit;
+}
+
+require_once __DIR__.'/bootstrap.php';
+
+$currentUser = getCurrentUser($pdo);
+
+if (!$currentUser) {
+    errorResponse("No autenticado", 401);
+}
+
+unset($currentUser['password_hash']);
+
+success([
+    "user" => $currentUser,
+    "authenticated" => true
+]);
+</file>
+
+<file path="bootstrap.php">
+<?php
+
+declare(strict_types=1);
+
+header("Content-Type: application/json; charset=UTF-8");
+
+require_once __DIR__.'/config.php';
+require_once __DIR__.'/response.php';
+require_once __DIR__.'/session.php';
+require_once __DIR__.'/auth_service.php';
+
+try {
+
+    $pdo = new PDO(
+        "mysql:host=".DB_HOST.";dbname=".DB_NAME.";charset=utf8mb4",
+        DB_USER,
+        DB_PASS,
+        [
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        ]
+    );
+
+} catch(PDOException $e){
+
+    errorResponse("No se pudo conectar con la base de datos.",500);
+
+}
+</file>
+
+<file path="config.php">
+<?php
+
+declare(strict_types=1);
+
+define('DB_HOST', '185.240.248.137');
+define('DB_NAME', 'visualpt_easychart');
+define('DB_USER', 'visualpt_easychart');
+define('DB_PASS', 'easychart1234');
+
+date_default_timezone_set('Europe/Lisbon');
+</file>
+
+<file path="deploy.php">
+<?php
+
+$token = $_GET['token'] ?? '';
+
+if ($token !== 'easychart_2026_4A8xP9Lm2Qv7YzR1kF6Nc3Bw') {
+    http_response_code(403);
+    exit('Forbidden');
+}
+
+exec('git -C /home4/visualpt/public_html/easychart pull origin main 2>&1', $output, $code);
+
+echo "<pre>";
+echo implode("\n", $output);
+echo "</pre>";
+</file>
+
+<file path="info.php">
+<?php
+phpinfo();
+</file>
+
+<file path="login.php">
+<?php
+
+declare(strict_types=1);
+
+// Manejo de cabeceras CORS para Vercel
+header("Access-Control-Allow-Origin: *");
+header("Access-Control-Allow-Methods: POST, OPTIONS");
+header("Access-Control-Allow-Headers: Content-Type, Authorization");
+
+// Si el navegador pregunta por OPTIONS (preflight), responder OK
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(200);
+    exit;
+}
+
+require_once __DIR__.'/bootstrap.php';
+
+// Obtener datos JSON enviados desde React
+$input = json_decode(file_get_contents('php://input'), true);
+
+$phone = $input['phone'] ?? '';
+$password = $input['password'] ?? '';
+
+if (empty($phone) || empty($password)) {
+    errorResponse("Teléfono y contraseña requeridos", 400);
+}
+
+// Llamar a la función login() que ya tienes en auth_service.php
+$user = login($pdo, $phone, $password);
+
+if (!$user) {
+    errorResponse("Credenciales incorrectas", 401);
+}
+
+// Devuelve el token y el usuario en el formato que espera React
+success([
+    'token' => $user['token'],
+    'user'  => $user
+]);
+</file>
+
+<file path="me.php">
+<?php
+
+declare(strict_types=1);
+
+ini_set('display_errors', '1');
+ini_set('display_startup_errors', '1');
+error_reporting(E_ALL);
+
+require_once __DIR__.'/bootstrap.php';
+
+$currentUser = getCurrentUser();
+
+success([
+    "user" => $currentUser,
+    "authenticated" => true
+]);
+</file>
+
+<file path="README.md">
+# phpApi
+</file>
+
+<file path="response.php">
+<?php
+
+declare(strict_types=1);
+
+function success($data = [])
+{
+    http_response_code(200);
+
+    echo json_encode([
+        "success" => true,
+        "data" => $data
+    ]);
+
+    exit;
+}
+
+function errorResponse(string $message,int $code=400)
+{
+    http_response_code($code);
+
+    echo json_encode([
+        "success"=>false,
+        "message"=>$message
+    ]);
+
+    exit;
+}
+</file>
+
+<file path="session.php">
+<?php
+
+declare(strict_types=1);
+
+/**
+ * Obtiene el token Bearer enviado por el cliente.
+ */
+function getBearerToken(): ?string
+{
+    $headers = getallheaders();
+
+    if (!isset($headers['Authorization'])) {
+        return null;
+    }
+
+    if (preg_match('/Bearer\s(\S+)/', $headers['Authorization'], $matches)) {
+        return $matches[1];
+    }
+
+    return null;
+}
+
+/**
+ * Genera un token aleatorio de 64 caracteres.
+ */
+function generateSessionToken(): string
+{
+    return bin2hex(random_bytes(32));
+}
+
+
+/**
+ * Guarda una nueva sesión.
+ */
+function createSession(PDO $pdo, array $user): string
+{
+    $token = generateSessionToken();
+
+    $expires = new DateTime('+30 days');
+
+    $sql = "
+        INSERT INTO user_sessions
+        (
+            user_id,
+            token,
+            expires_at,
+            last_activity,
+            ip_address,
+            user_agent
+        )
+        VALUES
+        (
+            :user_id,
+            :token,
+            :expires_at,
+            NOW(),
+            :ip,
+            :agent
+        )
+    ";
+
+    $stmt = $pdo->prepare($sql);
+
+    $stmt->execute([
+        ':user_id' => $user['id'],
+        ':token' => $token,
+        ':expires_at' => $expires->format('Y-m-d H:i:s'),
+        ':ip' => $_SERVER['REMOTE_ADDR'] ?? null,
+        ':agent' => $_SERVER['HTTP_USER_AGENT'] ?? null
+    ]);
+
+    return $token;
+}
+/**
+ * Busca una sesión válida por su token.
+ */
+function getSessionByToken(PDO $pdo, string $token): ?array
+{
+    $sql = "
+        SELECT
+            u.*
+        FROM user_sessions s
+        INNER JOIN users u
+            ON u.id = s.user_id
+        WHERE s.token = ?
+          AND s.expires_at > NOW()
+          AND u.active = 1
+        LIMIT 1
+    ";
+
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute([$token]);
+
+    $user = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    return $user ?: null;
+}
+</file>
+
+<file path="tagger.html">
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Generador de Etiquetas FlashStock</title>
+  <!-- Librería para generación directa de PDF -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <style>
+    * { box-sizing: border-box; font-family: 'Arial Black', 'Impact', sans-serif; }
+    body { margin: 0; background-color: #1e1e1e; color: #fff; display: flex; height: 100vh; font-family: Arial, sans-serif; }
+    
+    /* Panel lateral de edición */
+    .sidebar { width: 380px; background: #252526; padding: 20px; border-right: 1px solid #3c3c3c; display: flex; flex-direction: column; }
+    .sidebar h2 { font-size: 1.1rem; margin-top: 0; color: #f59e0b; text-transform: uppercase; font-family: Arial, sans-serif; }
+    
+    .tabs-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-bottom: 15px; }
+    .tab-btn { 
+      background: #333; color: #ccc; border: 1px solid #444; padding: 8px 4px; 
+      font-size: 0.75rem; cursor: pointer; border-radius: 3px; font-weight: bold; text-align: center;
+    }
+    .tab-btn.active { background: #d90429; color: #fff; border-color: #d90429; }
+    
+    .form-container { flex: 1; overflow-y: auto; padding-right: 5px; }
+    .form-group { margin-bottom: 12px; }
+    .form-group label { display: block; font-size: 0.8rem; margin-bottom: 4px; color: #aaa; }
+    .form-group input, .form-group textarea { 
+      width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #444; 
+      background: #1e1e1e; color: #fff; font-size: 0.85rem; font-family: Arial, sans-serif;
+    }
+    .form-group input:focus, .form-group textarea:focus { border-color: #f59e0b; outline: none; }
+
+    .actions { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+    .btn-secondary { background: #444; color: #fff; border: none; padding: 8px; border-radius: 4px; cursor: pointer; font-size: 0.8rem; font-weight: bold; }
+    .btn-secondary:hover { background: #555; }
+    
+    .btn-pdf { 
+      padding: 12px; background: #d90429; color: #fff; font-weight: bold; 
+      border: none; border-radius: 4px; cursor: pointer; font-size: 0.95rem; text-transform: uppercase;
+    }
+    .btn-pdf:hover { background: #b00320; }
+
+    .btn-print { 
+      padding: 10px; background: #f59e0b; color: #000; font-weight: bold; 
+      border: none; border-radius: 4px; cursor: pointer; font-size: 0.85rem; text-transform: uppercase;
+    }
+    .btn-print:hover { background: #d97706; }
+
+    /* Vista Previa Hoja A4 Maximizada */
+    .preview-area { flex: 1; padding: 10px; overflow: auto; display: flex; justify-content: center; background: #121212; }
+    
+    .sheet { 
+      width: 210mm; 
+      height: 297mm; 
+      background: white; 
+      color: #000; 
+      padding: 3mm; 
+      display: grid; 
+      grid-template-columns: repeat(2, 1fr); 
+      grid-template-rows: repeat(4, 1fr);
+      grid-gap: 3mm; 
+      box-shadow: 0 0 15px rgba(0,0,0,0.6); 
+    }
+
+    /* ETIQUETA - MÁXIMO APROVECHAMIENTO */
+    .tag { 
+      border: 3.5px dashed #d90429; 
+      width: 100%;
+      height: 100%; 
+      position: relative; 
+      display: flex; 
+      flex-direction: column; 
+      background: #fff; 
+      overflow: hidden;
+      border-radius: 10px; 
+      cursor: pointer;
+    }
+    .tag.selected { outline: 4px solid #f59e0b; outline-offset: -2px; }
+
+    /* Cabecera Roja */
+    .tag-header { 
+      background-color: #d90429; color: #ffffff; text-align: center; 
+      padding: 6px 0; font-size: 2.1rem; font-weight: 900; letter-spacing: -0.5px;
+      line-height: 1;
+    }
+
+    /* Centro: Título y Descripción */
+    .tag-body { 
+      flex: 1; display: flex; flex-direction: column; justify-content: center; 
+      align-items: center; text-align: center; padding: 4px 10px; color: #000;
+    }
+    .product-title { 
+      font-size: 1.3rem; font-weight: 900; line-height: 1.1; margin-bottom: 2px; text-transform: lowercase;
+    }
+    .product-specs { 
+      font-size: 1rem; font-weight: 800; line-height: 1.15; color: #000; text-transform: lowercase; white-space: pre-line;
+    }
+
+    /* Pie: Precio Viejo + Nuevo + Melhor Preço */
+    .tag-footer { 
+      height: 28mm; background-color: #d90429; display: flex; 
+      position: relative; border-top: 2px solid #d90429;
+    }
+
+    /* Bloque Amarillo Izquierda */
+    .yellow-block { 
+      background-color: #ffc800; width: 36%; display: flex; flex-direction: column; 
+      justify-content: center; align-items: center; padding: 2px;
+      border-top-right-radius: 10px;
+    }
+    .yellow-block span { 
+      color: #000; font-size: 1.05rem; font-weight: 900; line-height: 0.95; text-align: center; text-transform: uppercase;
+    }
+
+    /* Área Roja Derecha */
+    .price-area { 
+      width: 64%; display: flex; flex-direction: column; 
+      justify-content: space-between; align-items: flex-end; padding: 4px 8px 4px 0;
+    }
+
+    /* Bloque Negro Precio Anterior */
+    .old-price-box { 
+      background-color: #000; color: #fff; padding: 2px 10px; 
+      border-radius: 6px; font-size: 0.95rem; font-weight: 900; 
+      text-decoration: line-through; text-decoration-color: #d90429;
+    }
+
+    /* CONTENEDOR DE PRECIO ADAPTABLE */
+    .price-container {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      container-type: inline-size;
+    }
+
+    /* Precio Nuevo Auto-escalable */
+    .new-price { 
+      color: #ffffff; 
+      font-weight: 900; 
+      line-height: 0.9; 
+      letter-spacing: -1px;
+      white-space: nowrap;
+      text-align: right;
+      font-size: clamp(2rem, 28cqw, 4.5rem);
+    }
+
+    .tag-num { position: absolute; top: 2px; right: 5px; font-size: 0.6rem; color: #fff; opacity: 0.6; font-family: Arial; }
+
+    /* Impresión limpia sin elementos innecesarios */
+    @media print {
+      * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        color-adjust: exact !important;
+      }
+      @page {
+        size: A4 portrait;
+        margin: 0;
+      }
+      body { background: #fff; }
+      .sidebar { display: none !important; }
+      .preview-area { padding: 0; background: #fff; display: block; }
+      .sheet { 
+        box-shadow: none; 
+        width: 210mm; 
+        height: 297mm; 
+        padding: 2mm; 
+        grid-gap: 2mm;
+      }
+      .tag { border: 3px dashed #d90429 !important; }
+      .tag.selected { outline: none !important; }
+      .tag-num { display: none !important; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- PANEL DE CONTROL -->
+  <div class="sidebar">
+    <h2>Editar Etiquetas (1 al 8)</h2>
+    
+    <div class="tabs-grid" id="tabsContainer"></div>
+
+    <div class="form-container">
+      <div class="form-group">
+        <label id="lblTitle">Título del Producto:</label>
+        <input type="text" id="inTitle" oninput="updateCurrentTag()">
+      </div>
+
+      <div class="form-group">
+        <label>Descripción del Producto:</label>
+        <textarea id="inSpecs" rows="3" oninput="updateCurrentTag()"></textarea>
+      </div>
+
+      <div class="form-group">
+        <label>Precio Anterior (Negro):</label>
+        <input type="text" id="inOldPrice" placeholder="ej. 888,99 €" oninput="updateCurrentTag()">
+      </div>
+
+      <div class="form-group">
+        <label>Precio Nuevo (Grande Blanco):</label>
+        <input type="text" id="inPrice" placeholder="ej. 888,99 €" oninput="updateCurrentTag()">
+      </div>
+    </div>
+
+    <div class="actions">
+      <button class="btn-secondary" onclick="copyTag1ToAll()">Copiar Etiq. 1 a todas</button>
+      <button class="btn-secondary" onclick="saveProject()">💾 Guardar Edición (Proyecto)</button>
+      <button class="btn-secondary" onclick="document.getElementById('fileInput').click()">📂 Cargar Proyecto Guardado</button>
+      <input type="file" id="fileInput" style="display:none" accept=".json" onchange="loadProject(event)">
+      
+      <button class="btn-pdf" onclick="downloadPDF()">📄 Descargar PDF de Imprenta</button>
+      <button class="btn-print" onclick="window.print()">🖨️ Imprimir Directo</button>
+    </div>
+  </div>
+
+  <!-- VISTA PREVIA HOJA A4 -->
+  <div class="preview-area">
+    <div class="sheet" id="sheetContainer"></div>
+  </div>
+
+  <script>
+    const tagsData = Array.from({ length: 8 }, (_, i) => ({
+      title: "titulo producto",
+      specs: "descripcion producto",
+      oldPrice: "888,99 €",
+      price: "888,99 €"
+    }));
+
+    let currentIdx = 0;
+
+    function init() {
+      renderTabs();
+      renderSheet();
+      loadFormValues(0);
+    }
+
+    function renderTabs() {
+      const container = document.getElementById('tabsContainer');
+      container.innerHTML = '';
+      for (let i = 0; i < 8; i++) {
+        container.innerHTML += `
+          <button class="tab-btn ${i === currentIdx ? 'active' : ''}" onclick="selectTag(${i})">
+            Etiq. ${i + 1}
+          </button>
+        `;
+      }
+    }
+
+    function renderSheet() {
+      const sheet = document.getElementById('sheetContainer');
+      sheet.innerHTML = '';
+      tagsData.forEach((data, i) => {
+        sheet.innerHTML += `
+          <div class="tag ${i === currentIdx ? 'selected' : ''}" id="tag_${i}" onclick="selectTag(${i})">
+            <span class="tag-num">#${i + 1}</span>
+            <div class="tag-header">FlashStock.pt</div>
+            <div class="tag-body">
+              <div class="product-title" id="outTitle_${i}"></div>
+              <div class="product-specs" id="outSpecs_${i}"></div>
+            </div>
+            <div class="tag-footer">
+              <div class="yellow-block">
+                <span>MELHOR</span>
+                <span>PREÇO</span>
+              </div>
+              <div class="price-area">
+                <div class="old-price-box" id="outOldPrice_${i}"></div>
+                <div class="price-container">
+                  <div class="new-price" id="outPrice_${i}"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+        updateTagDOM(i);
+      });
+    }
+
+    function selectTag(index) {
+      currentIdx = index;
+      renderTabs();
+      
+      document.querySelectorAll('.tag').forEach((el, i) => {
+        el.classList.toggle('selected', i === currentIdx);
+      });
+
+      loadFormValues(currentIdx);
+    }
+
+    function loadFormValues(index) {
+      document.getElementById('lblTitle').innerText = `Título (Etiqueta #${index + 1}):`;
+      document.getElementById('inTitle').value = tagsData[index].title;
+      document.getElementById('inSpecs').value = tagsData[index].specs;
+      document.getElementById('inOldPrice').value = tagsData[index].oldPrice;
+      document.getElementById('inPrice').value = tagsData[index].price;
+    }
+
+    function updateCurrentTag() {
+      tagsData[currentIdx].title = document.getElementById('inTitle').value;
+      tagsData[currentIdx].specs = document.getElementById('inSpecs').value;
+      tagsData[currentIdx].oldPrice = document.getElementById('inOldPrice').value;
+      tagsData[currentIdx].price = document.getElementById('inPrice').value;
+      
+      updateTagDOM(currentIdx);
+    }
+
+    function updateTagDOM(i) {
+      document.getElementById(`outTitle_${i}`).innerText = tagsData[i].title || '';
+      document.getElementById(`outSpecs_${i}`).innerText = tagsData[i].specs || '';
+      
+      const oldP = document.getElementById(`outOldPrice_${i}`);
+      if (tagsData[i].oldPrice) {
+        oldP.innerText = tagsData[i].oldPrice;
+        oldP.style.display = 'block';
+      } else {
+        oldP.style.display = 'none';
+      }
+
+      const priceElem = document.getElementById(`outPrice_${i}`);
+      const textVal = tagsData[i].price || '';
+      priceElem.innerText = textVal;
+
+      const len = textVal.length;
+      if (len <= 4) {
+        priceElem.style.fontSize = 'clamp(2.8rem, 36cqw, 4.8rem)';
+      } else if (len <= 7) {
+        priceElem.style.fontSize = 'clamp(2.2rem, 28cqw, 3.8rem)';
+      } else if (len <= 9) {
+        priceElem.style.fontSize = 'clamp(1.8rem, 23cqw, 3.1rem)';
+      } else {
+        priceElem.style.fontSize = 'clamp(1.3rem, 18cqw, 2.4rem)';
+      }
+    }
+
+    function copyTag1ToAll() {
+      const firstTag = { ...tagsData[0] };
+      for (let i = 1; i < 8; i++) {
+        tagsData[i] = { ...firstTag };
+        updateTagDOM(i);
+      }
+    }
+
+    /* GENERACIÓN DE PDF NOMBRADO AUTOMÁTICAMENTE */
+    function downloadPDF() {
+      const element = document.getElementById('sheetContainer');
+      
+      // Quitar selección visual temporalmente
+      document.querySelectorAll('.tag').forEach(el => el.classList.remove('selected'));
+
+      // Formatear nombre: Etiquetas_AAAA-MM-DD_NombreProducto.pdf
+      const today = new Date().toISOString().split('T')[0];
+      const rawTitle = tagsData[0].title || 'Producto';
+      const cleanTitle = rawTitle.replace(/[^a-zA-Z0-9_\-]/g, '_').substring(0, 25);
+      const filename = `Etiquetas_${today}_${cleanTitle}.pdf`;
+
+      const opt = {
+        margin: 0,
+        filename: filename,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      };
+
+      html2pdf().set(opt).from(element).save().then(() => {
+        selectTag(currentIdx); // Restaurar selección
+      });
+    }
+
+    /* GUARDAR PROYECTO JSON PARA EDITAR LUEGO */
+    function saveProject() {
+      const today = new Date().toISOString().split('T')[0];
+      const rawTitle = tagsData[0].title || 'Producto';
+      const cleanTitle = rawTitle.replace(/[^a-zA-Z0-9_\-]/g, '_').substring(0, 25);
+      const filename = `Proyecto_Etiquetas_${today}_${cleanTitle}.json`;
+
+      const blob = new Blob([JSON.stringify(tagsData, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      a.click();
+    }
+
+    /* CARGAR PROYECTO JSON GUARDADO */
+    function loadProject(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          const loadedData = JSON.parse(e.target.result);
+          if (Array.isArray(loadedData) && loadedData.length === 8) {
+            loadedData.forEach((item, i) => {
+              tagsData[i] = item;
+            });
+            selectTag(0);
+            renderSheet();
+            alert('¡Proyecto cargado con éxito! Ya puedes corregir las etiquetas.');
+          } else {
+            alert('El archivo no tiene el formato correcto.');
+          }
+        } catch (err) {
+          alert('Error al leer el archivo de proyecto.');
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    init();
+  </script>
+</body>
+</html>
+</file>
+
+<file path="test.php">
+<?php
+
+echo function_exists('exec') ? 'SI' : 'NO';
+</file>
+
+<file path="song/song.php">
+<?php
+// Configuración de errores para desarrollo
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+
+// Headers CORS para permitir peticiones desde Vercel o cualquier dominio
+header("Access-Control-Allow-Origin: *");
+header("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS");
+header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With");
+header("Access-Control-Max-Age: 3600");
+header("Content-Type: application/json; charset=UTF-8");
+
+// Responder inmediatamente a las peticiones preflight (OPTIONS) de React
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(200);
+    exit();
+}
+
+// Cargar bootstrap y middleware de autenticación desde el directorio raíz
+require_once __DIR__ . '/../bootstrap.php';
+
+// Validar usuario autenticado
+$currentUser = getCurrentUser($pdo);
+if (!$currentUser) {
+    http_response_code(401);
+    echo json_encode(['error' => 'No autorizado']);
+    exit();
+}
+
+$workspaceId = $currentUser['workspace_id'];
+
+// Obtener el método HTTP de la petición (CORRECCIÓN CLAVE)
+$requestMethod = $_SERVER['REQUEST_METHOD'];
+
+// Router según el método HTTP
+switch ($requestMethod) {
+    case 'GET':
+        // Decidimos qué función llamar según si viene el parámetro action=catalog
+        if (isset($_GET['action']) && $_GET['action'] === 'catalog') {
+            handleGetRequestCatalog();
+        } else {
+            handleGetRequestSetList();
+        }
+        break;
+    case 'POST':
+        handlePostRequest();
+        break;
+    case 'PUT':
+        handlePutRequest();
+        break;
+    case 'DELETE':
+        handleDeleteRequest();
+        break;
+    default:
+        http_response_code(405);
+        echo json_encode(['error' => 'Method not allowed']);
+        break;
+}
+
+// ------------------------------------------------------------------
+// FUNCIONES DE MANEJO DE PETICIONES
+// ------------------------------------------------------------------
+
+function handleGetRequestSetList() {
+    global $pdo, $workspaceId;
+
+    // ------------------------------------------------------------------
+    // 1. SI SE CONSULTA UNA CANCIÓN ESPECÍFICA (?id=X)
+    // ------------------------------------------------------------------
+    if (isset($_GET['id'])) {
+        $stmt = $pdo->prepare("
+            SELECT s.*
+            FROM songs s
+            WHERE s.workspace_id = ? AND s.id = ?
+        ");
+        $stmt->execute([$workspaceId, $_GET['id']]);
+        $song = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if ($song) {
+            if (!empty($song['song_data'])) {
+                $song['song_data'] = json_decode($song['song_data'], true);
+            }
+            echo json_encode($song);
+        } else {
+            http_response_code(404);
+            echo json_encode(['error' => 'Song not found']);
+        }
+        return;
+    }
+
+    // ------------------------------------------------------------------
+    // 2. CONSULTA 1: Obtener solo setlists que TENGAN al menos 1 canción
+    // ------------------------------------------------------------------
+    $stmtSetlists = $pdo->prepare("
+        SELECT 
+            sl.id,
+            sl.setlist_name,
+            sl.display_order
+        FROM set_lists sl
+        WHERE sl.workspace_id = ?
+          AND EXISTS (
+              SELECT 1 
+              FROM set_list_songs sls 
+              WHERE sls.id_setlist = sl.id
+          )
+        ORDER BY sl.display_order ASC
+    ");
+    $stmtSetlists->execute([$workspaceId]);
+    $setlists = $stmtSetlists->fetchAll(PDO::FETCH_ASSOC);
+
+    // Si no hay ningún setlist con canciones, devolvemos un array vacío
+    if (empty($setlists)) {
+        echo json_encode(['setlists' => []]);
+        return;
+    }
+
+    // Indexar por ID en PHP e inicializar el array de canciones
+    $setlistsMap = [];
+    foreach ($setlists as $sl) {
+        $setlistsMap[$sl['id']] = [
+            'id' => $sl['id'],
+            'setlist_name' => $sl['setlist_name'],
+            'display_order' => $sl['display_order'],
+            'songs' => []
+        ];
+    }
+
+    // Obtener las claves/IDs de los setlists encontrados
+    $setlistIds = array_keys($setlistsMap);
+    $inClause = implode(',', array_fill(0, count($setlistIds), '?'));
+
+    // ------------------------------------------------------------------
+    // 3. CONSULTA 2: Traer las canciones pertenecientes a esos setlists
+    // ------------------------------------------------------------------
+    $stmtSongs = $pdo->prepare("
+        SELECT 
+            sls.id_setlist,
+            s.id AS song_id,
+            s.title,
+            s.artist,
+            s.key_signature,
+            s.tempo,
+            s.time_signature,
+            sls.display_order AS display_order,
+            sls.id as id_set_list_song
+        FROM set_list_songs sls
+        INNER JOIN songs s ON s.id = sls.id_song
+        WHERE sls.id_setlist IN ($inClause)
+        ORDER BY sls.id ASC
+    ");
+    $stmtSongs->execute($setlistIds);
+    $songsRows = $stmtSongs->fetchAll(PDO::FETCH_ASSOC);
+
+    // ------------------------------------------------------------------
+    // 4. AGRUPACIÓN Y CONSTRUCCIÓN DEL JSON FINAL
+    // ------------------------------------------------------------------
+    foreach ($songsRows as $row) {
+        $setId = $row['id_setlist'];
+        if (isset($setlistsMap[$setId])) {
+            $setlistsMap[$setId]['songs'][] = [
+                'id' => $row['song_id'],
+                'title' => $row['title'],
+                'artist' => $row['artist'],
+                'key_signature' => $row['key_signature'],
+                'tempo' => $row['tempo'],
+                'time_signature' => $row['time_signature'],
+                'id_set_list_song' => $row['id_set_list_song'],
+                'display_order' => $row['display_order']
+
+            ];
+        }
+    }
+
+    $response = [
+        'setlists' => array_values($setlistsMap)
+    ];
+
+    echo json_encode($response);
+}
+
+// Stubs para evitar errores si se invocan otros métodos HTTP
+
+
+
+// Reemplaza handlePostRequest en song.php[cite: 3]
+function handlePostRequest() {
+    global $pdo, $workspaceId;
+    $data = json_decode(file_get_contents("php://input"), true);
+
+    if (!isset($data['id_setlist']) || !isset($data['id_song'])) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Faltan parámetros id_setlist o id_song']);
+        return;
+    }
+
+    $idSetlist = $data['id_setlist'];
+    $idSong = $data['id_song'];
+
+    // Validar pertenencia del setlist al workspace
+    $stmtCheck = $pdo->prepare("SELECT id FROM set_lists WHERE id = ? AND workspace_id = ?");
+    $stmtCheck->execute([$idSetlist, $workspaceId]);
+    if (!$stmtCheck->fetch()) {
+        http_response_code(403);
+        echo json_encode(['error' => 'No autorizado']);
+        return;
+    }
+
+    // Obtener el siguiente display_order para el setlist
+    $stmtOrder = $pdo->prepare("SELECT COALESCE(MAX(display_order), 0) + 1 FROM set_list_songs WHERE id_setlist = ?");
+    $stmtOrder->execute([$idSetlist]);
+    $nextOrder = $stmtOrder->fetchColumn();
+
+    // Insertar la canción en el setlist
+    $stmtInsert = $pdo->prepare("INSERT INTO set_list_songs (id_setlist, id_song, display_order) VALUES (?, ?, ?)");
+    $stmtInsert->execute([$idSetlist, $idSong, $nextOrder]);
+
+    $newId = $pdo->lastInsertId();
+
+    echo json_encode([
+        'success' => true,
+        'id_set_list_song' => $newId,
+        'display_order' => $nextOrder,
+        'message' => 'Canción añadida al setlist'
+    ]);
+}
+
+// Reemplaza handlePutRequest y handleDeleteRequest en song.php
+
+// En handlePutRequest() dentro de song.php, añadimos el manejo para actualizar el nombre:
+
+function handlePutRequest() {
+    global $pdo, $workspaceId;
+    $data = json_decode(file_get_contents("php://input"), true);
+
+    if (!isset($data['id_setlist'])) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Falta el id_setlist']);
+        return;
+    }
+
+    $idSetlist = $data['id_setlist'];
+
+    // Validar que el setlist pertenezca al workspace
+    $stmtCheck = $pdo->prepare("SELECT id FROM set_lists WHERE id = ? AND workspace_id = ?");
+    $stmtCheck->execute([$idSetlist, $workspaceId]);
+    if (!$stmtCheck->fetch()) {
+        http_response_code(403);
+        echo json_encode(['error' => 'No autorizado o setlist no encontrado']);
+        return;
+    }
+
+    // 1. NUEVO: Actualizar el nombre del setlist
+    if (isset($data['setlist_name'])) {
+        $newName = trim($data['setlist_name']);
+        $stmtUpd = $pdo->prepare("UPDATE set_lists SET setlist_name = ? WHERE id = ? AND workspace_id = ?");
+        $stmtUpd->execute([$newName, $idSetlist, $workspaceId]);
+
+        echo json_encode(['success' => true, 'message' => 'Nombre del setlist actualizado correctamente']);
+        return;
+    }
+
+    // 2. Actualización de canciones del setlist (reordenar o reasignar)
+    if (isset($data['songs']) && is_array($data['songs'])) {
+        $stmtDel = $pdo->prepare("DELETE FROM set_list_songs WHERE id_setlist = ?");
+        $stmtDel->execute([$idSetlist]);
+
+        $stmtIns = $pdo->prepare("INSERT INTO set_list_songs (id_setlist, id_song, display_order) VALUES (?, ?, ?)");
+        foreach ($data['songs'] as $index => $song) {
+            $stmtIns->execute([$idSetlist, $song['id'], $index + 1]);
+        }
+
+        echo json_encode(['success' => true, 'message' => 'Setlist actualizado correctamente']);
+        return;
+    }
+
+    http_response_code(400);
+    echo json_encode(['error' => 'Datos inválidos para la actualización']);
+}
+
+function handleDeleteRequest() {
+    global $pdo, $workspaceId;
+
+    // Eliminar una canción específica del setlist o limpiar todo el setlist
+    $idSetlist = $_GET['id_setlist'] ?? null;
+    $idSetListSong = $_GET['id_set_list_song'] ?? null;
+
+    if (!$idSetlist) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Parámetro id_setlist requerido']);
+        return;
+    }
+
+    // Validar pertenencia al workspace
+    $stmtCheck = $pdo->prepare("SELECT id FROM set_lists WHERE id = ? AND workspace_id = ?");
+    $stmtCheck->execute([$idSetlist, $workspaceId]);
+    if (!$stmtCheck->fetch()) {
+        http_response_code(403);
+        echo json_encode(['error' => 'No autorizado']);
+        return;
+    }
+
+    if ($idSetListSong) {
+        // Eliminar una sola relación canción-setlist
+        $stmt = $pdo->prepare("DELETE FROM set_list_songs WHERE id = ? AND id_setlist = ?");
+        $stmt->execute([$idSetListSong, $idSetlist]);
+        echo json_encode(['success' => true, 'message' => 'Canción eliminada del setlist']);
+    } else {
+        // Limpiar todo el setlist completo
+        $stmt = $pdo->prepare("DELETE FROM set_list_songs WHERE id_setlist = ?");
+        $stmt->execute([$idSetlist]);
+        echo json_encode(['success' => true, 'message' => 'Setlist limpiado correctamente']);
+    }
+}
+function handleGetRequestCatalog() {
+    global $pdo, $workspaceId;
+
+    $search = $_GET['search'] ?? '';
+
+    if (empty(trim($search))) {
+        echo json_encode([]);
+        return;
+    }
+
+    $stmt = $pdo->prepare("
+        SELECT id, title, artist, key_signature, tempo, time_signature
+        FROM songs
+        WHERE workspace_id = ? 
+          AND (LOWER(title) LIKE ? OR LOWER(artist) LIKE ?)
+        ORDER BY title ASC
+        LIMIT 50
+    ");
+    $searchTerm = '%' . strtolower(trim($search)) . '%';
+    $stmt->execute([$workspaceId, $searchTerm, $searchTerm]);
+    
+    $songs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    echo json_encode($songs);
+}
+</file>
+
+<file path="api.php">
+<?php
+// Configuración de errores para desarrollo
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+
+// Headers CORS para permitir peticiones desde Vercel o cualquier dominio
+header("Access-Control-Allow-Origin: *");
+header("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS");
+header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With");
+header("Access-Control-Max-Age: 3600");
+header("Content-Type: application/json; charset=UTF-8");
+
+// Responder inmediatamente a las peticiones preflight (OPTIONS) de React
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(200);
+    exit();
+}
+
+// Cargar bootstrap y middleware de autenticación
+require_once __DIR__ . '/bootstrap.php';
+
+// Validar usuario autenticado
+$currentUser = getCurrentUser($pdo);
+if (!$currentUser) {
+    http_response_code(401);
+    echo json_encode(['error' => 'No autorizado']);
+    exit();
+}
+
+$workspaceId = $currentUser['workspace_id'];
+
+// Router según el método HTTP
+$requestMethod = $_SERVER['REQUEST_METHOD'];
+
+switch ($requestMethod) {
+    case 'GET':
+        handleGetRequest();
+        break;
+    case 'POST':
+        handlePostRequest();
+        break;
+    case 'PUT':
+        handlePutRequest();
+        break;
+    case 'DELETE':
+        handleDeleteRequest();
+        break;
+    default:
+        http_response_code(405);
+        echo json_encode(['error' => 'Method not allowed']);
+        break;
+}
+
+// ------------------------------------------------------------------
+// FUNCIONES DE MANEJO DE PETICIONES
+// ------------------------------------------------------------------
+
+function handleGetRequest() {
+    global $pdo, $workspaceId;
+    
+    if (isset($_GET['search'])) {
+        $searchTerm = '%' . $_GET['search'] . '%';
+        $stmt = $pdo->prepare("SELECT id, title, key_signature, tempo, time_signature, artist FROM songs WHERE workspace_id = ? AND (title LIKE ? OR artist LIKE ?)");
+        $stmt->execute([$workspaceId, $searchTerm, $searchTerm]);
+        echo json_encode($stmt->fetchAll());
+    } elseif (isset($_GET['id'])) {
+        $stmt = $pdo->prepare("SELECT * FROM songs WHERE workspace_id = ? AND id = ?");
+        $stmt->execute([$workspaceId, $_GET['id']]);
+        $song = $stmt->fetch();
+        
+        if ($song) {
+            $song['song_data'] = json_decode($song['song_data'], true);
+            echo json_encode($song);
+        } else {
+            http_response_code(404);
+            echo json_encode(['error' => 'Song not found']);
+        }
+    } else {
+        $stmt = $pdo->prepare("SELECT id, title, key_signature, tempo, time_signature,artist FROM songs WHERE workspace_id = ?");
+        $stmt->execute([$workspaceId]);
+        echo json_encode($stmt->fetchAll());
+    }
+}
+
+function handlePostRequest() {
+    global $pdo, $workspaceId;
+    
+    $data = json_decode(file_get_contents('php://input'), true);
+    
+    $requiredFields = ['title', 'key_signature', 'tempo', 'time_signature', 'song_data', 'artist'];
+    foreach ($requiredFields as $field) {
+        if (!isset($data[$field])) {
+            http_response_code(400);
+            echo json_encode(['error' => "Missing required field: $field"]);
+            return;
+        }
+    }
+    
+    try {
+        $stmt = $pdo->prepare("INSERT INTO songs (workspace_id, title, key_signature, tempo, time_signature, song_data, artist) VALUES (?, ?, ?, ?, ?, ?, ?)");
+        $stmt->execute([
+            $workspaceId,
+            $data['title'],
+            $data['key_signature'],
+            $data['tempo'],
+            $data['time_signature'],
+            json_encode($data['song_data']),
+            $data['artist']
+        ]);
+        
+        $songId = $pdo->lastInsertId();
+        echo json_encode([
+            'id' => $songId,
+            'message' => 'Song created successfully',
+            'data' => $data
+        ]);
+    } catch (PDOException $e) {
+        http_response_code(500);
+        echo json_encode(['error' => 'Database error: ' . $e->getMessage()]);
+    }
+}
+
+function handlePutRequest() {
+    global $pdo, $workspaceId;
+    
+    $data = json_decode(file_get_contents('php://input'), true);
+    
+    $requiredFields = ['id', 'title', 'key_signature', 'tempo', 'time_signature', 'song_data', 'artist'];
+    foreach ($requiredFields as $field) {
+        if (!isset($data[$field])) {
+            http_response_code(400);
+            echo json_encode(['error' => "Missing required field: $field"]);
+            return;
+        }
+    }
+    
+    try {
+        $stmt = $pdo->prepare("UPDATE songs SET title = ?, key_signature = ?, tempo = ?, time_signature = ?, song_data = ?, artist = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND workspace_id = ?");
+        $stmt->execute([
+            $data['title'],
+            $data['key_signature'],
+            $data['tempo'],
+            $data['time_signature'],
+            json_encode($data['song_data']),
+            $data['artist'],
+            $data['id'],
+            $workspaceId
+        ]);
+        
+        if ($stmt->rowCount() > 0) {
+            echo json_encode(['message' => 'Song updated successfully']);
+        } else {
+            http_response_code(404);
+            echo json_encode(['error' => 'Song not found or no changes made']);
+        }
+    } catch (PDOException $e) {
+        http_response_code(500);
+        echo json_encode(['error' => 'Database error: ' . $e->getMessage()]);
+    }
+}
+
+function handleDeleteRequest() {
+    global $pdo, $workspaceId;
+    
+    $data = json_decode(file_get_contents('php://input'), true);
+    $id = $_GET['id'] ?? $data['id'] ?? null;
+    
+    if (!$id) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Missing song ID']);
+        return;
+    }
+    
+    try {
+        $stmt = $pdo->prepare("DELETE FROM songs WHERE id = ? AND workspace_id = ?");
+        $stmt->execute([$id, $workspaceId]);
+        
+        if ($stmt->rowCount() > 0) {
+            echo json_encode(['message' => 'Song deleted successfully']);
+        } else {
+            http_response_code(404);
+            echo json_encode(['error' => 'Song not found']);
+        }
+    } catch (PDOException $e) {
+        http_response_code(500);
+        echo json_encode(['error' => 'Database error: ' . $e->getMessage()]);
+    }
+}
+</file>
+
+</files>
