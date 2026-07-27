@@ -226,6 +226,8 @@ function handlePostRequest() {
 
 // Reemplaza handlePutRequest y handleDeleteRequest en song.php
 
+// En handlePutRequest() dentro de song.php, añadimos el manejo para actualizar el nombre:
+
 function handlePutRequest() {
     global $pdo, $workspaceId;
     $data = json_decode(file_get_contents("php://input"), true);
@@ -238,7 +240,7 @@ function handlePutRequest() {
 
     $idSetlist = $data['id_setlist'];
 
-    // Validar que el setlist pertenezca al workspace del usuario
+    // Validar que el setlist pertenezca al workspace
     $stmtCheck = $pdo->prepare("SELECT id FROM set_lists WHERE id = ? AND workspace_id = ?");
     $stmtCheck->execute([$idSetlist, $workspaceId]);
     if (!$stmtCheck->fetch()) {
@@ -247,9 +249,18 @@ function handlePutRequest() {
         return;
     }
 
-    // Actualización de canciones del setlist (reordenar o reasignar)
+    // 1. NUEVO: Actualizar el nombre del setlist
+    if (isset($data['setlist_name'])) {
+        $newName = trim($data['setlist_name']);
+        $stmtUpd = $pdo->prepare("UPDATE set_lists SET setlist_name = ? WHERE id = ? AND workspace_id = ?");
+        $stmtUpd->execute([$newName, $idSetlist, $workspaceId]);
+
+        echo json_encode(['success' => true, 'message' => 'Nombre del setlist actualizado correctamente']);
+        return;
+    }
+
+    // 2. Actualización de canciones del setlist (reordenar o reasignar)
     if (isset($data['songs']) && is_array($data['songs'])) {
-        // Opcional: limpiar canciones actuales y reinsertar con nuevo orden
         $stmtDel = $pdo->prepare("DELETE FROM set_list_songs WHERE id_setlist = ?");
         $stmtDel->execute([$idSetlist]);
 
@@ -305,29 +316,22 @@ function handleGetRequestCatalog() {
 
     $search = $_GET['search'] ?? '';
 
-    if (!empty($search)) {
-        $stmt = $pdo->prepare("
-            SELECT id, title, artist, key_signature, tempo, time_signature
-            FROM songs
-            WHERE workspace_id = ? 
-              AND (LOWER(title) LIKE ? OR LOWER(artist) LIKE ?)
-            ORDER BY title ASC
-            LIMIT 50
-        ");
-        $searchTerm = '%' . strtolower(trim($search)) . '%';
-        $stmt->execute([$workspaceId, $searchTerm, $searchTerm]);
-    } else {
-        // Si no hay texto de búsqueda, devolvemos un conjunto vacío o inicial ligero
-        $stmt = $pdo->prepare("
-            SELECT id, title, artist, key_signature, tempo, time_signature
-            FROM songs
-            WHERE workspace_id = ?
-            ORDER BY title ASC
-            LIMIT 20
-        ");
-        $stmt->execute([$workspaceId]);
+    if (empty(trim($search))) {
+        echo json_encode([]);
+        return;
     }
 
+    $stmt = $pdo->prepare("
+        SELECT id, title, artist, key_signature, tempo, time_signature
+        FROM songs
+        WHERE workspace_id = ? 
+          AND (LOWER(title) LIKE ? OR LOWER(artist) LIKE ?)
+        ORDER BY title ASC
+        LIMIT 50
+    ");
+    $searchTerm = '%' . strtolower(trim($search)) . '%';
+    $stmt->execute([$workspaceId, $searchTerm, $searchTerm]);
+    
     $songs = $stmt->fetchAll(PDO::FETCH_ASSOC);
     echo json_encode($songs);
 }
