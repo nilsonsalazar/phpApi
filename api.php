@@ -137,7 +137,7 @@ function handleGetRequestSetList() {
         if (!isset($setlistsMap[$setId])) {
             $setlistsMap[$setId] = [
                 'id' => $setId,
-                'name' => $row['setlist_name'],
+                'setlist_name' => $row['setlist_name'],
                 'display_order' => $row['display_order'],
                 'songs' => []
             ];
