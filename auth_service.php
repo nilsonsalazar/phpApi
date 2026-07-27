@@ -46,7 +46,7 @@ function getUserByPhone(PDO $pdo, string $phone): ?array
     $sql = "
         SELECT *
         FROM users
-        WHERE phone = ?
+        WHERE username = ?
           AND active = 1
         LIMIT 1
     ";
