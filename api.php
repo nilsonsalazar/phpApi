@@ -81,7 +81,85 @@ function handleGetRequest() {
         echo json_encode($stmt->fetchAll());
     }
 }
+function handleGetRequestSetList() {
+    global $pdo, $workspaceId;
 
+    // Si se consulta una canción específica
+    if (isset($_GET['id'])) {
+        $stmt = $pdo->prepare("
+            SELECT s.*
+            FROM songs s
+            INNER JOIN set_list_songs sls ON s.id = sls.id_song
+            INNER JOIN set_lists sl ON sl.id = sls.id_setlist
+            WHERE sl.workspace_id = ? AND s.id = ?
+        ");
+        $stmt->execute([$workspaceId, $_GET['id']]);
+        $song = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if ($song) {
+            $song['song_data'] = json_decode($song['song_data'], true);
+            echo json_encode($song);
+        } else {
+            http_response_code(404);
+            echo json_encode(['error' => 'Song not found in setlist']);
+        }
+        return;
+    }
+
+    // Consulta única para obtener setlists y sus canciones en una sola iteración
+    $stmt = $pdo->prepare("
+        SELECT 
+            sl.id AS setlist_id,
+            sl.name AS setlist_name,
+            sl.display_order,
+            s.id AS song_id,
+            s.title,
+            s.artist,
+            s.key_signature,
+            s.tempo,
+            s.time_signature
+        FROM set_lists sl
+        INNER JOIN set_list_songs sls ON sl.id = sls.id_setlist
+        INNER JOIN songs s ON s.id = sls.id_song
+        WHERE sl.workspace_id = ?
+        ORDER BY sl.display_order ASC, sls.id ASC
+    ");
+
+    $stmt->execute([$workspaceId]);
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    // Agrupación en PHP por ID de cada Setlist
+    $setlistsMap = [];
+
+    foreach ($rows as $row) {
+        $setId = $row['setlist_id'];
+
+        if (!isset($setlistsMap[$setId])) {
+            $setlistsMap[$setId] = [
+                'id' => $setId,
+                'setlist_name' => $row['setlist_name'],
+                'display_order' => $row['display_order'],
+                'songs' => []
+            ];
+        }
+
+        $setlistsMap[$setId]['songs'][] = [
+            'id' => $row['song_id'],
+            'title' => $row['title'],
+            'artist' => $row['artist'],
+            'key_signature' => $row['key_signature'],
+            'tempo' => $row['tempo'],
+            'time_signature' => $row['time_signature']
+        ];
+    }
+
+    // Reindexar el array para devolver una estructura JSON limpia
+    $response = [
+        'setlists' => array_values($setlistsMap)
+    ];
+
+    echo json_encode($response);
+}
 function handlePostRequest() {
     global $pdo, $workspaceId;
     
