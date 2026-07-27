@@ -16,7 +16,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit();
 }
 
-// Cargar bootstrap y middleware de autenticación
+// Cargar bootstrap y middleware de autenticación desde el directorio raíz
 require_once __DIR__ . '/../bootstrap.php';
 
 // Validar usuario autenticado
@@ -29,10 +29,13 @@ if (!$currentUser) {
 
 $workspaceId = $currentUser['workspace_id'];
 
+// Obtener el método HTTP de la petición (CORRECCIÓN CLAVE)
+$requestMethod = $_SERVER['REQUEST_METHOD'];
+
 // Router según el método HTTP
 switch ($requestMethod) {
     case 'GET':
-        handleGetRequestSetList(); // <--- Cambia handleGetRequest() por handleGetRequestSetList()
+        handleGetRequestSetList();
         break;
     case 'POST':
         handlePostRequest();
@@ -52,7 +55,6 @@ switch ($requestMethod) {
 // ------------------------------------------------------------------
 // FUNCIONES DE MANEJO DE PETICIONES
 // ------------------------------------------------------------------
-
 
 function handleGetRequestSetList() {
     global $pdo, $workspaceId;
@@ -164,4 +166,20 @@ function handleGetRequestSetList() {
     ];
 
     echo json_encode($response);
+}
+
+// Stubs para evitar errores si se invocan otros métodos HTTP
+function handlePostRequest() {
+    http_response_code(405);
+    echo json_encode(['error' => 'POST no implementado en este endpoint']);
+}
+
+function handlePutRequest() {
+    http_response_code(405);
+    echo json_encode(['error' => 'PUT no implementado en este endpoint']);
+}
+
+function handleDeleteRequest() {
+    http_response_code(405);
+    echo json_encode(['error' => 'DELETE no implementado en este endpoint']);
 }
