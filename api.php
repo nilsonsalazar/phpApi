@@ -84,76 +84,108 @@ function handleGetRequest() {
 function handleGetRequestSetList() {
     global $pdo, $workspaceId;
 
-    // Si se consulta una canción específica
+    // ------------------------------------------------------------------
+    // 1. SI SE CONSULTA UNA CANCIÓN ESPECÍFICA (?id=X)
+    // ------------------------------------------------------------------
     if (isset($_GET['id'])) {
         $stmt = $pdo->prepare("
             SELECT s.*
             FROM songs s
-            INNER JOIN set_list_songs sls ON s.id = sls.id_song
-            INNER JOIN set_lists sl ON sl.id = sls.id_setlist
-            WHERE sl.workspace_id = ? AND s.id = ?
+            WHERE s.workspace_id = ? AND s.id = ?
         ");
         $stmt->execute([$workspaceId, $_GET['id']]);
         $song = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if ($song) {
-            $song['song_data'] = json_decode($song['song_data'], true);
+            if (!empty($song['song_data'])) {
+                $song['song_data'] = json_decode($song['song_data'], true);
+            }
             echo json_encode($song);
         } else {
             http_response_code(404);
-            echo json_encode(['error' => 'Song not found in setlist']);
+            echo json_encode(['error' => 'Song not found']);
         }
         return;
     }
 
-    // Consulta única para obtener setlists y sus canciones en una sola iteración
-    $stmt = $pdo->prepare("
+    // ------------------------------------------------------------------
+    // 2. CONSULTA 1: Obtener solo setlists que TENGAN al menos 1 canción
+    // ------------------------------------------------------------------
+    $stmtSetlists = $pdo->prepare("
         SELECT 
-            sl.id AS setlist_id,
-            sl.setlist_name AS setlist_name,
-            sl.display_order,
+            sl.id,
+            sl.setlist_name,
+            sl.display_order
+        FROM set_lists sl
+        WHERE sl.workspace_id = ?
+          AND EXISTS (
+              SELECT 1 
+              FROM set_list_songs sls 
+              WHERE sls.id_setlist = sl.id
+          )
+        ORDER BY sl.display_order ASC
+    ");
+    $stmtSetlists->execute([$workspaceId]);
+    $setlists = $stmtSetlists->fetchAll(PDO::FETCH_ASSOC);
+
+    // Si no hay ningún setlist con canciones, devolvemos un array vacío
+    if (empty($setlists)) {
+        echo json_encode(['setlists' => []]);
+        return;
+    }
+
+    // Indexar por ID en PHP e inicializar el array de canciones
+    $setlistsMap = [];
+    foreach ($setlists as $sl) {
+        $setlistsMap[$sl['id']] = [
+            'id' => $sl['id'],
+            'setlist_name' => $sl['setlist_name'],
+            'display_order' => $sl['display_order'],
+            'songs' => []
+        ];
+    }
+
+    // Obtener las claves/IDs de los setlists encontrados
+    $setlistIds = array_keys($setlistsMap);
+    $inClause = implode(',', array_fill(0, count($setlistIds), '?'));
+
+    // ------------------------------------------------------------------
+    // 3. CONSULTA 2: Traer las canciones pertenecientes a esos setlists
+    // ------------------------------------------------------------------
+    $stmtSongs = $pdo->prepare("
+        SELECT 
+            sls.id_setlist,
             s.id AS song_id,
             s.title,
             s.artist,
             s.key_signature,
             s.tempo,
             s.time_signature
-        FROM set_lists sl
-        INNER JOIN set_list_songs sls ON sl.id = sls.id_setlist
+        FROM set_list_songs sls
         INNER JOIN songs s ON s.id = sls.id_song
-        WHERE sl.workspace_id = ?
-        ORDER BY sl.display_order ASC, sls.id ASC
+        WHERE sls.id_setlist IN ($inClause)
+        ORDER BY sls.id ASC
     ");
+    $stmtSongs->execute($setlistIds);
+    $songsRows = $stmtSongs->fetchAll(PDO::FETCH_ASSOC);
 
-    $stmt->execute([$workspaceId]);
-    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-    // Agrupación en PHP por ID de cada Setlist
-    $setlistsMap = [];
-
-    foreach ($rows as $row) {
-        $setId = $row['setlist_id'];
-
-        if (!isset($setlistsMap[$setId])) {
-            $setlistsMap[$setId] = [
-                'id' => $setId,
-                'setlist_name' => $row['setlist_name'],
-                'display_order' => $row['display_order'],
-                'songs' => []
+    // ------------------------------------------------------------------
+    // 4. AGRUPACIÓN Y CONSTRUCCIÓN DEL JSON FINAL
+    // ------------------------------------------------------------------
+    foreach ($songsRows as $row) {
+        $setId = $row['id_setlist'];
+        if (isset($setlistsMap[$setId])) {
+            $setlistsMap[$setId]['songs'][] = [
+                'id' => $row['song_id'],
+                'title' => $row['title'],
+                'artist' => $row['artist'],
+                'key_signature' => $row['key_signature'],
+                'tempo' => $row['tempo'],
+                'time_signature' => $row['time_signature']
             ];
         }
-
-        $setlistsMap[$setId]['songs'][] = [
-            'id' => $row['song_id'],
-            'title' => $row['title'],
-            'artist' => $row['artist'],
-            'key_signature' => $row['key_signature'],
-            'tempo' => $row['tempo'],
-            'time_signature' => $row['time_signature']
-        ];
     }
 
-    // Reindexar el array para devolver una estructura JSON limpia
     $response = [
         'setlists' => array_values($setlistsMap)
     ];
