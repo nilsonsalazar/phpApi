@@ -110,7 +110,7 @@ function handleGetRequestSetList() {
     $stmt = $pdo->prepare("
         SELECT 
             sl.id AS setlist_id,
-            sl.name AS setlist_name,
+            sl.setlist_name AS setlist_name,
             sl.display_order,
             s.id AS song_id,
             s.title,
@@ -137,7 +137,7 @@ function handleGetRequestSetList() {
         if (!isset($setlistsMap[$setId])) {
             $setlistsMap[$setId] = [
                 'id' => $setId,
-                'setlist_name' => $row['setlist_name'],
+                'name' => $row['setlist_name'],
                 'display_order' => $row['display_order'],
                 'songs' => []
             ];
