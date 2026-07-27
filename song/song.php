@@ -303,14 +303,31 @@ function handleDeleteRequest() {
 function handleGetRequestCatalog() {
     global $pdo, $workspaceId;
 
-    $stmt = $pdo->prepare("
-        SELECT id, title, artist, key_signature, tempo, time_signature
-        FROM songs
-        WHERE workspace_id = ?
-        ORDER BY title ASC
-    ");
-    $stmt->execute([$workspaceId]);
+    $search = $_GET['search'] ?? '';
+
+    if (!empty($search)) {
+        $stmt = $pdo->prepare("
+            SELECT id, title, artist, key_signature, tempo, time_signature
+            FROM songs
+            WHERE workspace_id = ? 
+              AND (LOWER(title) LIKE ? OR LOWER(artist) LIKE ?)
+            ORDER BY title ASC
+            LIMIT 50
+        ");
+        $searchTerm = '%' . strtolower(trim($search)) . '%';
+        $stmt->execute([$workspaceId, $searchTerm, $searchTerm]);
+    } else {
+        // Si no hay texto de búsqueda, devolvemos un conjunto vacío o inicial ligero
+        $stmt = $pdo->prepare("
+            SELECT id, title, artist, key_signature, tempo, time_signature
+            FROM songs
+            WHERE workspace_id = ?
+            ORDER BY title ASC
+            LIMIT 20
+        ");
+        $stmt->execute([$workspaceId]);
+    }
+
     $songs = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    
     echo json_encode($songs);
 }
