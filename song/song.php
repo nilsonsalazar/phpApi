@@ -30,11 +30,9 @@ if (!$currentUser) {
 $workspaceId = $currentUser['workspace_id'];
 
 // Router según el método HTTP
-$requestMethod = $_SERVER['REQUEST_METHOD'];
-
 switch ($requestMethod) {
     case 'GET':
-        handleGetRequest();
+        handleGetRequestSetList(); // <--- Cambia handleGetRequest() por handleGetRequestSetList()
         break;
     case 'POST':
         handlePostRequest();
