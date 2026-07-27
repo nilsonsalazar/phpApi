@@ -18,15 +18,15 @@ require_once __DIR__.'/bootstrap.php';
 // Obtener datos JSON enviados desde React
 $input = json_decode(file_get_contents('php://input'), true);
 
-$phone = $input['phone'] ?? '';
+$username = $input['username'] ?? '';
 $password = $input['password'] ?? '';
 
 if (empty($phone) || empty($password)) {
-    errorResponse("Teléfono y contraseña requeridos", 400);
+    errorResponse("Usuario y contraseña requeridos", 400);
 }
 
 // Llamar a la función login() que ya tienes en auth_service.php
-$user = login($pdo, $phone, $password);
+$user = login($pdo, $username, $password);
 
 if (!$user) {
     errorResponse("Credenciales incorrectas", 401);
@@ -35,5 +35,7 @@ if (!$user) {
 // Devuelve el token y el usuario en el formato que espera React
 success([
     'token' => $user['token'],
-    'user'  => $user
+    'user'  => $user,
+    'role'  => $user['role'],
+    'workspace_id' => $user['workspace_id'],
 ]);
