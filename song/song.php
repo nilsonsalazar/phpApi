@@ -35,7 +35,12 @@ $requestMethod = $_SERVER['REQUEST_METHOD'];
 // Router según el método HTTP
 switch ($requestMethod) {
     case 'GET':
-        handleGetRequestSetList();
+        // Decidimos qué función llamar según si viene el parámetro action=catalog
+        if (isset($_GET['action']) && $_GET['action'] === 'catalog') {
+            handleGetRequestCatalog();
+        } else {
+            handleGetRequestSetList();
+        }
         break;
     case 'POST':
         handlePostRequest();
@@ -294,4 +299,18 @@ function handleDeleteRequest() {
         $stmt->execute([$idSetlist]);
         echo json_encode(['success' => true, 'message' => 'Setlist limpiado correctamente']);
     }
+}
+function handleGetRequestCatalog() {
+    global $pdo, $workspaceId;
+
+    $stmt = $pdo->prepare("
+        SELECT id, title, artist, key_signature, tempo, time_signature
+        FROM songs
+        WHERE workspace_id = ?
+        ORDER BY title ASC
+    ");
+    $stmt->execute([$workspaceId]);
+    $songs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+    echo json_encode($songs);
 }
