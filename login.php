@@ -21,7 +21,7 @@ $input = json_decode(file_get_contents('php://input'), true);
 $username = $input['username'] ?? '';
 $password = $input['password'] ?? '';
 
-if (empty($phone) || empty($password)) {
+if (empty($username) || empty($password)) {
     errorResponse("Usuario y contraseña requeridos", 400);
 }
 
