@@ -135,7 +135,9 @@ function handleGetRequestSetList() {
             s.artist,
             s.key_signature,
             s.tempo,
-            s.time_signature
+            s.time_signature,
+            sls.display_order AS display_order,
+            sls.id as id_set_list_song
         FROM set_list_songs sls
         INNER JOIN songs s ON s.id = sls.id_song
         WHERE sls.id_setlist IN ($inClause)
@@ -156,7 +158,10 @@ function handleGetRequestSetList() {
                 'artist' => $row['artist'],
                 'key_signature' => $row['key_signature'],
                 'tempo' => $row['tempo'],
-                'time_signature' => $row['time_signature']
+                'time_signature' => $row['time_signature'],
+                'id_set_list_song' => $row['id_set_list_song'],
+                'display_order' => $row['display_order']
+
             ];
         }
     }
