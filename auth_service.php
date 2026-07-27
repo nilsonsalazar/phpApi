@@ -41,7 +41,7 @@ function getWorkspaceId(): int
 /**
  * Busca un usuario por teléfono.
  */
-function getUserByPhone(PDO $pdo, string $phone): ?array
+function getUserByUsername(PDO $pdo, string $username): ?array
 {
     $sql = "
         SELECT *
@@ -52,7 +52,7 @@ function getUserByPhone(PDO $pdo, string $phone): ?array
     ";
 
     $stmt = $pdo->prepare($sql);
-    $stmt->execute([$phone]);
+    $stmt->execute([$username]);
 
     $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -65,9 +65,9 @@ function getUserByPhone(PDO $pdo, string $phone): ?array
  * Devuelve el usuario si las credenciales son correctas.
  * Devuelve null si son incorrectas.
  */
-function login(PDO $pdo, string $phone, string $password): ?array
+function login(PDO $pdo, string $username, string $password): ?array
 {
-    $user = getUserByPhone($pdo, $phone);
+    $user = getUserByUsername($pdo, $username);
 
     if (!$user) {
         return null;
