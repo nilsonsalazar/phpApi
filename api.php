@@ -63,7 +63,7 @@ function handleGetRequest() {
     
     if (isset($_GET['search'])) {
         $searchTerm = '%' . $_GET['search'] . '%';
-        $stmt = $pdo->prepare("SELECT id, title, key_signature, tempo, time_signature, artist FROM songs WHERE workspace_id = ? AND (title LIKE ? OR artist LIKE ?)");
+        $stmt = $pdo->prepare("SELECT id, title, key_signature, tempo, time_signature, artist,lyrics FROM songs WHERE workspace_id = ? AND (title LIKE ? OR artist LIKE ?)");
         $stmt->execute([$workspaceId, $searchTerm, $searchTerm]);
         echo json_encode($stmt->fetchAll());
     } elseif (isset($_GET['id'])) {
@@ -79,7 +79,7 @@ function handleGetRequest() {
             echo json_encode(['error' => 'Song not found']);
         }
     } else {
-        $stmt = $pdo->prepare("SELECT id, title, key_signature, tempo, time_signature,artist FROM songs WHERE workspace_id = ?");
+        $stmt = $pdo->prepare("SELECT id, title, key_signature, tempo, time_signature,artist,lyrics FROM songs WHERE workspace_id = ?");
         $stmt->execute([$workspaceId]);
         echo json_encode($stmt->fetchAll());
     }
