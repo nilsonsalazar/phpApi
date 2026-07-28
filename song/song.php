@@ -29,15 +29,17 @@ if (!$currentUser) {
 
 $workspaceId = $currentUser['workspace_id'];
 
-// Obtener el método HTTP de la petición (CORRECCIÓN CLAVE)
+// Obtener el método HTTP de la petición
 $requestMethod = $_SERVER['REQUEST_METHOD'];
 
 // Router según el método HTTP
 switch ($requestMethod) {
     case 'GET':
-        // Decidimos qué función llamar según si viene el parámetro action=catalog
+        // Decidimos qué función llamar según el parámetro action
         if (isset($_GET['action']) && $_GET['action'] === 'catalog') {
             handleGetRequestCatalog();
+        } elseif (isset($_GET['action']) && $_GET['action'] === 'lyrics') {
+            handleGetRequestLyrics();
         } else {
             handleGetRequestSetList();
         }
@@ -63,6 +65,43 @@ switch ($requestMethod) {
 // ------------------------------------------------------------------
 // FUNCIONES DE MANEJO DE PETICIONES
 // ------------------------------------------------------------------
+
+/**
+ * NUEVO MÉTODO: Traer expresamente el campo lyrics y metadatos básicos de la canción por ID
+ */
+function handleGetRequestLyrics() {
+    global $pdo, $workspaceId;
+
+    $songId = $_GET['id'] ?? null;
+
+    if (!$songId) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Parámetro id de canción requerido']);
+        return;
+    }
+
+    $stmt = $pdo->prepare("
+        SELECT lyrics
+        FROM songs
+        WHERE workspace_id = ? AND id = ?
+    ");
+    $stmt->execute([$workspaceId, $songId]);
+    $song = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if ($song) {
+        // Si el campo lyrics está almacenado como JSON string, lo decodificamos si es necesario o lo devolvemos tal cual
+        echo json_encode([
+            'success' => true,
+            'song' => [
+                
+                'lyrics' => $song['lyrics']
+            ]
+        ]);
+    } else {
+        http_response_code(404);
+        echo json_encode(['error' => 'Canción no encontrada']);
+    }
+}
 
 function handleGetRequestSetList() {
     global $pdo, $workspaceId;
@@ -169,7 +208,6 @@ function handleGetRequestSetList() {
                 'time_signature' => $row['time_signature'],
                 'id_set_list_song' => $row['id_set_list_song'],
                 'display_order' => $row['display_order']
-
             ];
         }
     }
@@ -181,11 +219,6 @@ function handleGetRequestSetList() {
     echo json_encode($response);
 }
 
-// Stubs para evitar errores si se invocan otros métodos HTTP
-
-
-
-// Reemplaza handlePostRequest en song.php[cite: 3]
 function handlePostRequest() {
     global $pdo, $workspaceId;
     $data = json_decode(file_get_contents("php://input"), true);
@@ -199,7 +232,6 @@ function handlePostRequest() {
     $idSetlist = $data['id_setlist'];
     $idSong = $data['id_song'];
 
-    // Validar pertenencia del setlist al workspace
     $stmtCheck = $pdo->prepare("SELECT id FROM set_lists WHERE id = ? AND workspace_id = ?");
     $stmtCheck->execute([$idSetlist, $workspaceId]);
     if (!$stmtCheck->fetch()) {
@@ -208,12 +240,10 @@ function handlePostRequest() {
         return;
     }
 
-    // Obtener el siguiente display_order para el setlist
     $stmtOrder = $pdo->prepare("SELECT COALESCE(MAX(display_order), 0) + 1 FROM set_list_songs WHERE id_setlist = ?");
     $stmtOrder->execute([$idSetlist]);
     $nextOrder = $stmtOrder->fetchColumn();
 
-    // Insertar la canción en el setlist
     $stmtInsert = $pdo->prepare("INSERT INTO set_list_songs (id_setlist, id_song, display_order) VALUES (?, ?, ?)");
     $stmtInsert->execute([$idSetlist, $idSong, $nextOrder]);
 
@@ -227,10 +257,6 @@ function handlePostRequest() {
     ]);
 }
 
-// Reemplaza handlePutRequest y handleDeleteRequest en song.php
-
-// En handlePutRequest() dentro de song.php, añadimos el manejo para actualizar el nombre:
-
 function handlePutRequest() {
     global $pdo, $workspaceId;
     $data = json_decode(file_get_contents("php://input"), true);
@@ -243,7 +269,6 @@ function handlePutRequest() {
 
     $idSetlist = $data['id_setlist'];
 
-    // Validar que el setlist pertenezca al workspace
     $stmtCheck = $pdo->prepare("SELECT id FROM set_lists WHERE id = ? AND workspace_id = ?");
     $stmtCheck->execute([$idSetlist, $workspaceId]);
     if (!$stmtCheck->fetch()) {
@@ -252,7 +277,6 @@ function handlePutRequest() {
         return;
     }
 
-    // 1. NUEVO: Actualizar el nombre del setlist
     if (isset($data['setlist_name'])) {
         $newName = trim($data['setlist_name']);
         $stmtUpd = $pdo->prepare("UPDATE set_lists SET setlist_name = ? WHERE id = ? AND workspace_id = ?");
@@ -262,7 +286,6 @@ function handlePutRequest() {
         return;
     }
 
-    // 2. Actualización de canciones del setlist (reordenar o reasignar)
     if (isset($data['songs']) && is_array($data['songs'])) {
         $stmtDel = $pdo->prepare("DELETE FROM set_list_songs WHERE id_setlist = ?");
         $stmtDel->execute([$idSetlist]);
@@ -283,7 +306,6 @@ function handlePutRequest() {
 function handleDeleteRequest() {
     global $pdo, $workspaceId;
 
-    // Eliminar una canción específica del setlist o limpiar todo el setlist
     $idSetlist = $_GET['id_setlist'] ?? null;
     $idSetListSong = $_GET['id_set_list_song'] ?? null;
 
@@ -293,7 +315,6 @@ function handleDeleteRequest() {
         return;
     }
 
-    // Validar pertenencia al workspace
     $stmtCheck = $pdo->prepare("SELECT id FROM set_lists WHERE id = ? AND workspace_id = ?");
     $stmtCheck->execute([$idSetlist, $workspaceId]);
     if (!$stmtCheck->fetch()) {
@@ -303,17 +324,16 @@ function handleDeleteRequest() {
     }
 
     if ($idSetListSong) {
-        // Eliminar una sola relación canción-setlist
         $stmt = $pdo->prepare("DELETE FROM set_list_songs WHERE id = ? AND id_setlist = ?");
         $stmt->execute([$idSetListSong, $idSetlist]);
         echo json_encode(['success' => true, 'message' => 'Canción eliminada del setlist']);
     } else {
-        // Limpiar todo el setlist completo
         $stmt = $pdo->prepare("DELETE FROM set_list_songs WHERE id_setlist = ?");
         $stmt->execute([$idSetlist]);
         echo json_encode(['success' => true, 'message' => 'Setlist limpiado correctamente']);
     }
 }
+
 function handleGetRequestCatalog() {
     global $pdo, $workspaceId;
 
