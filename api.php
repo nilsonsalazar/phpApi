@@ -109,7 +109,7 @@ function handlePostRequest() {
             $data['time_signature'],
             json_encode($data['song_data']),
             $data['artist'],
-            'Empty'
+            'No Lyrics'
         ]);
         
         $songId = $pdo->lastInsertId();
