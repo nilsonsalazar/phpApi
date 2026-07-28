@@ -50,7 +50,13 @@ switch ($requestMethod) {
         break;
     case 'PUT':
         requireRole($pdo, ['admin', 'editor']);
-        handlePutRequest();
+        // Verificamos si la acción es actualizar letra o si viene el parámetro action en la URL o body
+        $inputData = json_decode(file_get_contents("php://input"), true);
+        if ((isset($_GET['action']) && $_GET['action'] === 'updatelyric') || (isset($inputData['action']) && $inputData['action'] === 'updatelyric')) {
+            handlePutLyric($inputData);
+        } else {
+            handlePutRequest($inputData);
+        }
         break;
     case 'DELETE':
         requireRole($pdo, ['admin']);
@@ -89,11 +95,9 @@ function handleGetRequestLyrics() {
     $song = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if ($song) {
-        // Si el campo lyrics está almacenado como JSON string, lo decodificamos si es necesario o lo devolvemos tal cual
         echo json_encode([
             'success' => true,
             'song' => [
-                
                 'lyrics' => $song['lyrics']
             ]
         ]);
@@ -103,12 +107,42 @@ function handleGetRequestLyrics() {
     }
 }
 
+/**
+ * NUEVO MÉTODO: Actualizar específicamente el campo lyrics de una canción
+ */
+function handlePutLyric($data) {
+    global $pdo, $workspaceId;
+
+    $songId = $data['id'] ?? $_GET['id'] ?? null;
+    $lyrics = $data['lyrics'] ?? null;
+
+    if (!$songId) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Parámetro id de canción requerido']);
+        return;
+    }
+
+    // Validar que la canción pertenezca al workspace actual
+    $stmtCheck = $pdo->prepare("SELECT id FROM songs WHERE id = ? AND workspace_id = ?");
+    $stmtCheck->execute([$songId, $workspaceId]);
+    if (!$stmtCheck->fetch()) {
+        http_response_code(403);
+        echo json_encode(['error' => 'No autorizado o canción no encontrada']);
+        return;
+    }
+
+    $stmtUpd = $pdo->prepare("UPDATE songs SET lyrics = ? WHERE id = ? AND workspace_id = ?");
+    $stmtUpd->execute([$lyrics, $songId, $workspaceId]);
+
+    echo json_encode([
+        'success' => true,
+        'message' => 'Letra de la canción actualizada correctamente'
+    ]);
+}
+
 function handleGetRequestSetList() {
     global $pdo, $workspaceId;
 
-    // ------------------------------------------------------------------
-    // 1. SI SE CONSULTA UNA CANCIÓN ESPECÍFICA (?id=X)
-    // ------------------------------------------------------------------
     if (isset($_GET['id'])) {
         $stmt = $pdo->prepare("
             SELECT s.*
@@ -130,9 +164,6 @@ function handleGetRequestSetList() {
         return;
     }
 
-    // ------------------------------------------------------------------
-    // 2. CONSULTA 1: Obtener solo setlists que TENGAN al menos 1 canción
-    // ------------------------------------------------------------------
     $stmtSetlists = $pdo->prepare("
         SELECT 
             sl.id,
@@ -150,13 +181,11 @@ function handleGetRequestSetList() {
     $stmtSetlists->execute([$workspaceId]);
     $setlists = $stmtSetlists->fetchAll(PDO::FETCH_ASSOC);
 
-    // Si no hay ningún setlist con canciones, devolvemos un array vacío
     if (empty($setlists)) {
         echo json_encode(['setlists' => []]);
         return;
     }
 
-    // Indexar por ID en PHP e inicializar el array de canciones
     $setlistsMap = [];
     foreach ($setlists as $sl) {
         $setlistsMap[$sl['id']] = [
@@ -167,13 +196,9 @@ function handleGetRequestSetList() {
         ];
     }
 
-    // Obtener las claves/IDs de los setlists encontrados
     $setlistIds = array_keys($setlistsMap);
     $inClause = implode(',', array_fill(0, count($setlistIds), '?'));
 
-    // ------------------------------------------------------------------
-    // 3. CONSULTA 2: Traer las canciones pertenecientes a esos setlists
-    // ------------------------------------------------------------------
     $stmtSongs = $pdo->prepare("
         SELECT 
             sls.id_setlist,
@@ -193,9 +218,6 @@ function handleGetRequestSetList() {
     $stmtSongs->execute($setlistIds);
     $songsRows = $stmtSongs->fetchAll(PDO::FETCH_ASSOC);
 
-    // ------------------------------------------------------------------
-    // 4. AGRUPACIÓN Y CONSTRUCCIÓN DEL JSON FINAL
-    // ------------------------------------------------------------------
     foreach ($songsRows as $row) {
         $setId = $row['id_setlist'];
         if (isset($setlistsMap[$setId])) {
@@ -257,9 +279,8 @@ function handlePostRequest() {
     ]);
 }
 
-function handlePutRequest() {
+function handlePutRequest($data) {
     global $pdo, $workspaceId;
-    $data = json_decode(file_get_contents("php://input"), true);
 
     if (!isset($data['id_setlist'])) {
         http_response_code(400);

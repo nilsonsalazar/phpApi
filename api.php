@@ -100,7 +100,7 @@ function handlePostRequest() {
     }
     
     try {
-        $stmt = $pdo->prepare("INSERT INTO songs (workspace_id, title, key_signature, tempo, time_signature, song_data, artist) VALUES (?, ?, ?, ?, ?, ?, ?)");
+        $stmt = $pdo->prepare("INSERT INTO songs (workspace_id, title, key_signature, tempo, time_signature, song_data, artist,lyrics) VALUES (?, ?, ?, ?, ?, ?, ?)");
         $stmt->execute([
             $workspaceId,
             $data['title'],
@@ -108,7 +108,8 @@ function handlePostRequest() {
             $data['tempo'],
             $data['time_signature'],
             json_encode($data['song_data']),
-            $data['artist']
+            $data['artist'],
+            'Empty'
         ]);
         
         $songId = $pdo->lastInsertId();
